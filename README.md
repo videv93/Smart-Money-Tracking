@@ -29,6 +29,192 @@ A comprehensive MLOps pipeline for tracking and analyzing smart money movements 
 - **Monitoring**: Prometheus, Grafana
 - **Containerization**: Docker, Docker Compose
 
+## 🏗️ System Component Chart
+
+```mermaid
+graph TB
+    %% Data Sources
+    subgraph "Blockchain Sources"
+        ETH[Ethereum Network]
+        WS[WebSocket Feed]
+        RPC[RPC Endpoint]
+    end
+
+    %% Data Ingestion
+    subgraph "Data Ingestion Layer"
+        INGEST[Blockchain Ingestion Service]
+        WEB3[Web3 Client]
+    end
+
+    %% Message Queue
+    subgraph "Message Queue"
+        KAFKA[Apache Kafka]
+        ZK[Zookeeper]
+        DEBEZIUM[Debezium CDC]
+    end
+
+    %% Stream Processing
+    subgraph "Stream Processing"
+        FLINK[Apache Flink]
+        STREAM_PROC[Stream Processor]
+        RT_DETECT[Real-time Pattern Detection]
+    end
+
+    %% Batch Processing
+    subgraph "Batch Processing"
+        SPARK[Apache Spark]
+        BATCH_PROC[Batch Processor]
+        FEATURE_ENG[Feature Engineering]
+        ML_SCORING[ML Scoring Engine]
+    end
+
+    %% Data Storage
+    subgraph "Data Storage Layer"
+        MINIO[MinIO Object Storage]
+        DELTA[Delta Lake]
+        POSTGRES[PostgreSQL]
+        STAGING[Staging Schema]
+        PROD[Production Schema]
+    end
+
+    %% ML Pipeline
+    subgraph "ML/MLOps"
+        MLFLOW[MLflow Tracking]
+        MODEL_TRAIN[Model Training]
+        MODEL_REG[Model Registry]
+        DVC[DVC Pipeline]
+        GREAT_EXP[Great Expectations]
+    end
+
+    %% Data Transformation
+    subgraph "Data Transformation"
+        DBT[dbt Core]
+        TRANSFORM[Data Transformation]
+        QUALITY[Data Quality Checks]
+    end
+
+    %% Monitoring & Alerting
+    subgraph "Monitoring & Alerting"
+        PROMETHEUS[Prometheus]
+        GRAFANA[Grafana]
+        ALERT_MGR[Alert Manager]
+        SLACK[Slack Notifications]
+        EMAIL[Email Alerts]
+    end
+
+    %% API & UI
+    subgraph "API & Interface"
+        API[REST API]
+        DASH[Monitoring Dashboard]
+        UI[Web Interface]
+    end
+
+    %% Workflow Orchestration
+    subgraph "Orchestration"
+        AIRFLOW[Apache Airflow]
+        SCHEDULER[Task Scheduler]
+    end
+
+    %% Data Flow Connections
+    ETH --> INGEST
+    WS --> INGEST
+    RPC --> INGEST
+    
+    INGEST --> WEB3
+    WEB3 --> KAFKA
+    
+    KAFKA --> FLINK
+    KAFKA --> SPARK
+    KAFKA --> DEBEZIUM
+    
+    FLINK --> STREAM_PROC
+    STREAM_PROC --> RT_DETECT
+    RT_DETECT --> POSTGRES
+    
+    SPARK --> BATCH_PROC
+    BATCH_PROC --> FEATURE_ENG
+    FEATURE_ENG --> ML_SCORING
+    ML_SCORING --> POSTGRES
+    
+    POSTGRES --> STAGING
+    STAGING --> DBT
+    DBT --> TRANSFORM
+    TRANSFORM --> PROD
+    QUALITY --> GREAT_EXP
+    
+    POSTGRES --> MINIO
+    MINIO --> DELTA
+    DELTA --> MODEL_TRAIN
+    MODEL_TRAIN --> MLFLOW
+    MLFLOW --> MODEL_REG
+    DVC --> MODEL_TRAIN
+    
+    DEBEZIUM --> POSTGRES
+    
+    PROD --> API
+    API --> DASH
+    API --> UI
+    
+    PROMETHEUS --> GRAFANA
+    GRAFANA --> ALERT_MGR
+    ALERT_MGR --> SLACK
+    ALERT_MGR --> EMAIL
+    
+    AIRFLOW --> SCHEDULER
+    SCHEDULER --> SPARK
+    SCHEDULER --> DBT
+    SCHEDULER --> MODEL_TRAIN
+    
+    %% Monitoring connections
+    KAFKA -.-> PROMETHEUS
+    FLINK -.-> PROMETHEUS
+    SPARK -.-> PROMETHEUS
+    POSTGRES -.-> PROMETHEUS
+    MINIO -.-> PROMETHEUS
+
+    %% Styling
+    classDef blockchain fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    classDef processing fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef storage fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
+    classDef ml fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    classDef monitoring fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef orchestration fill:#f1f8e9,stroke:#558b2f,stroke-width:2px
+
+    class ETH,WS,RPC blockchain
+    class KAFKA,FLINK,SPARK,STREAM_PROC,BATCH_PROC processing
+    class MINIO,DELTA,POSTGRES,STAGING,PROD storage
+    class MLFLOW,MODEL_TRAIN,MODEL_REG,DVC,GREAT_EXP ml
+    class PROMETHEUS,GRAFANA,ALERT_MGR monitoring
+    class AIRFLOW,SCHEDULER orchestration
+```
+
+### Component Descriptions
+
+| Component | Purpose | Technology |
+|-----------|---------|------------|
+| **Blockchain Ingestion** | Real-time transaction monitoring and data collection | Web3.py, WebSocket |
+| **Apache Kafka** | Message queue for streaming data pipeline | Kafka + Zookeeper |
+| **Apache Flink** | Real-time stream processing and pattern detection | Flink SQL, CEP |
+| **Apache Spark** | Batch processing for ML feature engineering | PySpark, Delta Lake |
+| **PostgreSQL** | Primary data warehouse with staging/production schemas | PostgreSQL 15+ |
+| **MinIO + Delta Lake** | Object storage for historical data and model artifacts | S3-compatible storage |
+| **MLflow** | ML model tracking, versioning, and registry | MLflow Tracking Server |
+| **dbt** | Data transformation and modeling | dbt Core |
+| **Debezium** | Change Data Capture for real-time data sync | Debezium PostgreSQL Connector |
+| **Prometheus + Grafana** | System monitoring and visualization | Metrics collection and dashboards |
+| **Apache Airflow** | Workflow orchestration and scheduling | DAG-based task scheduling |
+| **Great Expectations** | Data quality validation and testing | Data profiling and validation |
+
+### Data Flow Summary
+
+1. **Ingestion**: Blockchain data → Kafka topics
+2. **Stream Processing**: Kafka → Flink → Real-time alerts
+3. **Batch Processing**: Kafka → Spark → Feature engineering → PostgreSQL
+4. **CDC**: PostgreSQL changes → Debezium → Kafka → Real-time sync
+5. **Transformation**: Staging data → dbt → Production schema
+6. **ML Pipeline**: Historical data → Model training → MLflow → Scoring
+7. **Monitoring**: All components → Prometheus → Grafana → Alerts
+
 ## 📊 Smart Money Detection Criteria
 
 The system identifies smart money based on:
