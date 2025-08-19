@@ -1,0 +1,93 @@
+# Smart Money Tracking Configuration
+
+# Blockchain Data Sources
+blockchain:
+  ethereum:
+    rpc_url: "https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+    websocket_url: "wss://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+    start_block: "latest"
+  polygon:
+    rpc_url: "https://polygon-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+    websocket_url: "wss://polygon-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+  arbitrum:
+    rpc_url: "https://arb-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+
+# Smart Money Criteria
+smart_money:
+  min_wallet_balance: 100  # ETH
+  min_transaction_volume: 10000  # USD
+  min_success_rate: 0.75
+  whale_threshold: 1000  # ETH
+  tracking_wallets:
+    - "0x..." # Add known smart money wallets
+
+# MinIO Configuration (Data Lake)
+minio:
+  endpoint: "localhost:9000"
+  access_key: "minio"
+  secret_key: "minio123"
+  bucket_name: "smart-money-data"
+  secure: false
+
+# PostgreSQL Configuration
+postgresql:
+  host: "localhost"
+  port: 5432
+  database: "smart_money_db"
+  username: "postgres"
+  password: "postgres"
+  staging_schema: "staging"
+  production_schema: "production"
+
+# Spark Configuration
+spark:
+  app_name: "SmartMoneyProcessor"
+  master: "local[*]"
+  driver_memory: "2g"
+  executor_memory: "2g"
+  packages:
+    - "org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.0"
+    - "io.delta:delta-core_2.12:2.4.0"
+    - "org.postgresql:postgresql:42.6.0"
+
+# Kafka Configuration
+kafka:
+  bootstrap_servers: "localhost:9092"
+  topics:
+    transactions: "blockchain-transactions"
+    smart_money_alerts: "smart-money-alerts"
+    wallet_updates: "wallet-updates"
+
+# Flink Configuration
+flink:
+  checkpoint_interval: 60000
+  state_backend: "filesystem"
+  checkpoint_dir: "file:///tmp/flink-checkpoints"
+
+# ML Model Configuration
+ml:
+  model_name: "smart_money_classifier"
+  features:
+    - "transaction_volume"
+    - "gas_price_percentile"
+    - "transaction_frequency"
+    - "wallet_age"
+    - "success_rate"
+    - "unique_contracts"
+  threshold: 0.8
+  retrain_interval_days: 7
+
+# Data Validation
+validation:
+  max_gas_price: 1000  # Gwei
+  min_transaction_value: 0.001  # ETH
+  max_block_time_diff: 300  # seconds
+
+# Monitoring
+monitoring:
+  alert_thresholds:
+    large_transaction: 100  # ETH
+    unusual_gas: 500  # Gwei
+    smart_money_confidence: 0.9
+  slack_webhook: ""
+  email_alerts: []

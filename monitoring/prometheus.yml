@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'smart-money-alerts'
+    static_configs:
+      - targets: ['alert-monitor:8000']
+    scrape_interval: 10s
+    metrics_path: /metrics
+
+  - job_name: 'kafka-exporter'
+    static_configs:
+      - targets: ['kafka:9092']
+    scrape_interval: 30s
+
+  - job_name: 'postgres-exporter'
+    static_configs:
+      - targets: ['postgres:5432']
+    scrape_interval: 30s
