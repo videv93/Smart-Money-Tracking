@@ -1,0 +1,107 @@
+{{- if .Values.components.batchProcessing.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "smart-money-tracking.fullname" . }}-batch-processing
+  labels:
+    {{- include "smart-money-tracking.labels" . | nindent 4 }}
+    app.kubernetes.io/component: batch-processing
+spec:
+  schedule: {{ .Values.components.batchProcessing.schedule | quote }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "smart-money-tracking.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: batch-processing
+        spec:
+          restartPolicy: OnFailure
+          {{- with .Values.global.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: batch-processing
+              image: "{{ .Values.image.registry }}/{{ .Values.components.batchProcessing.image.repository }}:{{ .Values.components.batchProcessing.image.tag | default .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              env:
+                - name: POSTGRES_HOST
+                  value: "{{ include "smart-money-tracking.fullname" . }}-postgresql"
+                - name: POSTGRES_PORT
+                  value: "5432"
+                - name: POSTGRES_DB
+                  value: "{{ .Values.postgresql.auth.database }}"
+                - name: POSTGRES_USER
+                  value: "{{ .Values.postgresql.auth.username }}"
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "smart-money-tracking.fullname" . }}-postgresql-secret
+                      key: postgresql-password
+                - name: MINIO_ENDPOINT
+                  value: "{{ include "smart-money-tracking.fullname" . }}-minio:9000"
+                - name: MINIO_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "smart-money-tracking.fullname" . }}-minio-secret
+                      key: root-user
+                - name: MINIO_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "smart-money-tracking.fullname" . }}-minio-secret
+                      key: root-password
+                - name: SPARK_DRIVER_MEMORY
+                  value: {{ .Values.config.spark.driverMemory | quote }}
+                - name: SPARK_EXECUTOR_MEMORY
+                  value: {{ .Values.config.spark.executorMemory | quote }}
+              volumeMounts:
+                - name: config
+                  mountPath: /app/config
+                  readOnly: true
+                - name: data-volume
+                  mountPath: /app/data
+                - name: logs-volume
+                  mountPath: /app/logs
+                - name: checkpoints-volume
+                  mountPath: /app/checkpoints
+              resources:
+                {{- toYaml .Values.components.batchProcessing.resources | nindent 16 }}
+          volumes:
+            - name: config
+              configMap:
+                name: {{ include "smart-money-tracking.fullname" . }}-config
+            {{- if .Values.persistence.enabled }}
+            - name: data-volume
+              persistentVolumeClaim:
+                claimName: {{ include "smart-money-tracking.fullname" . }}-data-pvc
+            - name: logs-volume
+              persistentVolumeClaim:
+                claimName: {{ include "smart-money-tracking.fullname" . }}-logs-pvc
+            - name: checkpoints-volume
+              persistentVolumeClaim:
+                claimName: {{ include "smart-money-tracking.fullname" . }}-checkpoints-pvc
+            {{- else }}
+            - name: data-volume
+              emptyDir: {}
+            - name: logs-volume
+              emptyDir: {}
+            - name: checkpoints-volume
+              emptyDir: {}
+            {{- end }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

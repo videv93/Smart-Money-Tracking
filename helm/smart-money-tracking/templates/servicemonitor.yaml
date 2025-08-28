@@ -1,0 +1,20 @@
+{{- if .Values.monitoring.prometheus.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "smart-money-tracking.fullname" . }}-service-monitor
+  labels:
+    {{- include "smart-money-tracking.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "smart-money-tracking.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+      targetPort: 9249
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.namespace }}
+{{- end }}

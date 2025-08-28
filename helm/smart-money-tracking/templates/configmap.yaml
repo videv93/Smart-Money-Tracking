@@ -1,0 +1,176 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "smart-money-tracking.fullname" . }}-config
+  labels:
+    {{- include "smart-money-tracking.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    # Smart Money Tracking Configuration
+    blockchain:
+      ethereum:
+        start_block: {{ .Values.config.blockchain.ethereum.startBlock | quote }}
+      smart_money:
+        min_wallet_balance: {{ .Values.config.blockchain.smartMoney.minWalletBalance }}
+        min_transaction_volume: {{ .Values.config.blockchain.smartMoney.minTransactionVolume }}
+        min_success_rate: {{ .Values.config.blockchain.smartMoney.minSuccessRate }}
+        whale_threshold: {{ .Values.config.blockchain.smartMoney.whaleThreshold }}
+
+    # MinIO Configuration (Data Lake)
+    minio:
+      endpoint: "{{ include "smart-money-tracking.fullname" . }}-minio:9000"
+      access_key: "minio"
+      secret_key: "minio123"
+      bucket_name: "smart-money-data"
+      secure: false
+
+    # PostgreSQL Configuration
+    postgresql:
+      host: "{{ include "smart-money-tracking.fullname" . }}-postgresql"
+      port: 5432
+      database: "{{ .Values.postgresql.auth.database }}"
+      username: "{{ .Values.postgresql.auth.username }}"
+      staging_schema: "staging"
+      production_schema: "production"
+
+    # Spark Configuration
+    spark:
+      app_name: {{ .Values.config.spark.appName | quote }}
+      master: "local[*]"
+      driver_memory: {{ .Values.config.spark.driverMemory | quote }}
+      executor_memory: {{ .Values.config.spark.executorMemory | quote }}
+      packages:
+        - "org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.0"
+        - "io.delta:delta-core_2.12:2.4.0"
+        - "org.postgresql:postgresql:42.6.0"
+
+    # Kafka Configuration
+    kafka:
+      bootstrap_servers: "{{ include "smart-money-tracking.fullname" . }}-kafka:9092"
+      topics:
+        transactions: "blockchain-transactions"
+        smart_money_alerts: "smart-money-alerts"
+        wallet_updates: "wallet-updates"
+
+    # Flink Configuration
+    flink:
+      checkpoint_interval: {{ .Values.config.flink.checkpointInterval }}
+      state_backend: {{ .Values.config.flink.stateBackend | quote }}
+      checkpoint_dir: "file:///tmp/flink-checkpoints"
+
+    # ML Model Configuration
+    ml:
+      model_name: {{ .Values.config.ml.modelName | quote }}
+      features:
+        - "transaction_volume"
+        - "gas_price_percentile"
+        - "transaction_frequency"
+        - "wallet_age"
+        - "success_rate"
+        - "unique_contracts"
+      threshold: {{ .Values.config.ml.threshold }}
+      retrain_interval_days: {{ .Values.config.ml.retrainIntervalDays }}
+
+    # Monitoring
+    monitoring:
+      alert_thresholds:
+        large_transaction: {{ .Values.config.monitoring.alertThresholds.largeTransaction }}
+        unusual_gas: {{ .Values.config.monitoring.alertThresholds.unusualGas }}
+        smart_money_confidence: {{ .Values.config.monitoring.alertThresholds.smartMoneyConfidence }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "smart-money-tracking.fullname" . }}-postgresql-init
+  labels:
+    {{- include "smart-money-tracking.labels" . | nindent 4 }}
+data:
+  init-db.sql: |
+    -- Create schemas
+    CREATE SCHEMA IF NOT EXISTS staging;
+    CREATE SCHEMA IF NOT EXISTS production;
+
+    -- Create staging tables
+    CREATE TABLE IF NOT EXISTS staging.blockchain_transactions (
+        id SERIAL PRIMARY KEY,
+        transaction_hash VARCHAR(66) NOT NULL UNIQUE,
+        block_number BIGINT NOT NULL,
+        block_timestamp TIMESTAMP NOT NULL,
+        from_address VARCHAR(42) NOT NULL,
+        to_address VARCHAR(42),
+        value DECIMAL(36, 18) NOT NULL,
+        gas_price BIGINT NOT NULL,
+        gas_used BIGINT NOT NULL,
+        gas_limit BIGINT NOT NULL,
+        transaction_fee DECIMAL(36, 18) NOT NULL,
+        blockchain VARCHAR(20) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS staging.smart_money_wallets (
+        id SERIAL PRIMARY KEY,
+        wallet_address VARCHAR(42) NOT NULL UNIQUE,
+        balance DECIMAL(36, 18) NOT NULL,
+        transaction_count BIGINT NOT NULL DEFAULT 0,
+        success_rate DECIMAL(5, 4) NOT NULL DEFAULT 0,
+        last_active TIMESTAMP,
+        is_whale BOOLEAN DEFAULT FALSE,
+        confidence_score DECIMAL(3, 2) NOT NULL DEFAULT 0,
+        blockchain VARCHAR(20) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Create production tables
+    CREATE TABLE IF NOT EXISTS production.enriched_transactions (
+        id SERIAL PRIMARY KEY,
+        transaction_hash VARCHAR(66) NOT NULL UNIQUE,
+        block_number BIGINT NOT NULL,
+        block_timestamp TIMESTAMP NOT NULL,
+        from_address VARCHAR(42) NOT NULL,
+        to_address VARCHAR(42),
+        value DECIMAL(36, 18) NOT NULL,
+        gas_price BIGINT NOT NULL,
+        gas_used BIGINT NOT NULL,
+        transaction_fee DECIMAL(36, 18) NOT NULL,
+        blockchain VARCHAR(20) NOT NULL,
+        is_smart_money BOOLEAN DEFAULT FALSE,
+        smart_money_confidence DECIMAL(3, 2),
+        wallet_tier VARCHAR(20),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS production.smart_money_insights (
+        id SERIAL PRIMARY KEY,
+        wallet_address VARCHAR(42) NOT NULL,
+        blockchain VARCHAR(20) NOT NULL,
+        total_volume DECIMAL(36, 18) NOT NULL,
+        avg_gas_price DECIMAL(20, 2) NOT NULL,
+        transaction_frequency DECIMAL(10, 4) NOT NULL,
+        success_rate DECIMAL(5, 4) NOT NULL,
+        unique_contracts INTEGER NOT NULL DEFAULT 0,
+        wallet_age_days INTEGER NOT NULL DEFAULT 0,
+        confidence_score DECIMAL(3, 2) NOT NULL,
+        tier VARCHAR(20) NOT NULL,
+        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(wallet_address, blockchain)
+    );
+
+    -- Create indexes
+    CREATE INDEX IF NOT EXISTS idx_staging_transactions_block_number ON staging.blockchain_transactions(block_number);
+    CREATE INDEX IF NOT EXISTS idx_staging_transactions_from_address ON staging.blockchain_transactions(from_address);
+    CREATE INDEX IF NOT EXISTS idx_staging_transactions_to_address ON staging.blockchain_transactions(to_address);
+    CREATE INDEX IF NOT EXISTS idx_staging_transactions_timestamp ON staging.blockchain_transactions(block_timestamp);
+
+    CREATE INDEX IF NOT EXISTS idx_staging_wallets_address ON staging.smart_money_wallets(wallet_address);
+    CREATE INDEX IF NOT EXISTS idx_staging_wallets_confidence ON staging.smart_money_wallets(confidence_score);
+    CREATE INDEX IF NOT EXISTS idx_staging_wallets_blockchain ON staging.smart_money_wallets(blockchain);
+
+    CREATE INDEX IF NOT EXISTS idx_production_transactions_hash ON production.enriched_transactions(transaction_hash);
+    CREATE INDEX IF NOT EXISTS idx_production_transactions_smart_money ON production.enriched_transactions(is_smart_money);
+    CREATE INDEX IF NOT EXISTS idx_production_transactions_timestamp ON production.enriched_transactions(block_timestamp);
+
+    CREATE INDEX IF NOT EXISTS idx_production_insights_wallet ON production.smart_money_insights(wallet_address);
+    CREATE INDEX IF NOT EXISTS idx_production_insights_confidence ON production.smart_money_insights(confidence_score);
+    CREATE INDEX IF NOT EXISTS idx_production_insights_tier ON production.smart_money_insights(tier);

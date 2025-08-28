@@ -1,0 +1,334 @@
+# Default values for smart-money-tracking
+# This is a YAML-formatted file.
+
+# Global settings
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+  
+# Namespace
+namespace: smart-money-tracking
+
+# Application images
+image:
+  registry: docker.io
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+# Components configuration
+components:
+  blockchainIngestion:
+    enabled: true
+    image:
+      repository: smart-money-tracking/blockchain-ingestion
+      tag: "latest"
+    replicas: 2
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+    env:
+      - name: ETHEREUM_RPC_URL
+        valueFrom:
+          secretKeyRef:
+            name: blockchain-secrets
+            key: ethereum-rpc-url
+      - name: POLYGON_RPC_URL
+        valueFrom:
+          secretKeyRef:
+            name: blockchain-secrets
+            key: polygon-rpc-url
+      - name: ARBITRUM_RPC_URL
+        valueFrom:
+          secretKeyRef:
+            name: blockchain-secrets
+            key: arbitrum-rpc-url
+
+  batchProcessing:
+    enabled: true
+    image:
+      repository: smart-money-tracking/batch-processing
+      tag: "latest"
+    replicas: 1
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "1000m"
+      limits:
+        memory: "4Gi"
+        cpu: "2000m"
+    schedule: "0 */6 * * *" # Run every 6 hours
+
+  streamProcessing:
+    enabled: true
+    image:
+      repository: smart-money-tracking/stream-processing
+      tag: "latest"
+    replicas: 2
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+
+  mlModel:
+    enabled: true
+    image:
+      repository: smart-money-tracking/ml-model
+      tag: "latest"
+    replicas: 1
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "1000m"
+      limits:
+        memory: "4Gi"
+        cpu: "2000m"
+
+  monitoring:
+    enabled: true
+    image:
+      repository: smart-money-tracking/monitoring
+      tag: "latest"
+    replicas: 1
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+
+# PostgreSQL configuration
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: "postgres123"
+    username: "smartmoney"
+    password: "smartmoney123"
+    database: "smart_money_db"
+  primary:
+    persistence:
+      enabled: true
+      size: 50Gi
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+    initdb:
+      scriptsConfigMap: "postgresql-init-scripts"
+
+# MinIO configuration
+minio:
+  enabled: true
+  auth:
+    rootUser: "minio"
+    rootPassword: "minio123"
+  defaultBuckets: "smart-money-data"
+  persistence:
+    enabled: true
+    size: 100Gi
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+# Kafka configuration
+kafka:
+  enabled: true
+  replicaCount: 3
+  auth:
+    enabled: false
+  zookeeper:
+    enabled: true
+    replicaCount: 3
+  persistence:
+    enabled: true
+    size: 20Gi
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  topics:
+    - name: blockchain-transactions
+      partitions: 6
+      replicationFactor: 2
+    - name: smart-money-alerts
+      partitions: 3
+      replicationFactor: 2
+    - name: wallet-updates
+      partitions: 3
+      replicationFactor: 2
+
+# Monitoring stack
+monitoring:
+  prometheus:
+    enabled: true
+    server:
+      persistentVolume:
+        enabled: true
+        size: 20Gi
+      resources:
+        requests:
+          memory: "1Gi"
+          cpu: "500m"
+        limits:
+          memory: "2Gi"
+          cpu: "1000m"
+  
+  grafana:
+    enabled: true
+    admin:
+      user: admin
+      password: "admin123"
+    persistence:
+      enabled: true
+      size: 5Gi
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+
+# Airflow configuration
+airflow:
+  enabled: true
+  webserver:
+    replicas: 1
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+  scheduler:
+    replicas: 1
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+  worker:
+    replicas: 2
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "1000m"
+      limits:
+        memory: "4Gi"
+        cpu: "2000m"
+
+# Service configuration
+service:
+  type: ClusterIP
+  ports:
+    http: 80
+    metrics: 9090
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: smart-money-tracking.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Persistence
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size:
+    data: 100Gi
+    logs: 20Gi
+    checkpoints: 10Gi
+
+# Security
+security:
+  podSecurityPolicy:
+    enabled: false
+  networkPolicy:
+    enabled: false
+
+# Configuration
+config:
+  blockchain:
+    ethereum:
+      startBlock: "latest"
+    smartMoney:
+      minWalletBalance: 100
+      minTransactionVolume: 10000
+      minSuccessRate: 0.75
+      whaleThreshold: 1000
+  spark:
+    appName: "SmartMoneyProcessor"
+    driverMemory: "2g"
+    executorMemory: "2g"
+  flink:
+    checkpointInterval: 60000
+    stateBackend: "filesystem"
+  ml:
+    modelName: "smart_money_classifier"
+    threshold: 0.8
+    retrainIntervalDays: 7
+  monitoring:
+    alertThresholds:
+      largeTransaction: 100
+      unusualGas: 500
+      smartMoneyConfidence: 0.9
+
+# Secrets (these should be overridden in production)
+secrets:
+  blockchain:
+    ethereumRpcUrl: "https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+    polygonRpcUrl: "https://polygon-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+    arbitrumRpcUrl: "https://arb-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+  slack:
+    webhookUrl: ""
+  email:
+    smtpHost: ""
+    smtpPort: 587
+    username: ""
+    password: ""
+
+# Node selector and tolerations
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80

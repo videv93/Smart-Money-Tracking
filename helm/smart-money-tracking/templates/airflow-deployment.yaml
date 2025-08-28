@@ -1,0 +1,259 @@
+{{- if .Values.airflow.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "smart-money-tracking.fullname" . }}-airflow-webserver
+  labels:
+    {{- include "smart-money-tracking.labels" . | nindent 4 }}
+    app.kubernetes.io/component: airflow-webserver
+spec:
+  replicas: {{ .Values.airflow.webserver.replicas }}
+  selector:
+    matchLabels:
+      {{- include "smart-money-tracking.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: airflow-webserver
+  template:
+    metadata:
+      labels:
+        {{- include "smart-money-tracking.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: airflow-webserver
+    spec:
+      containers:
+        - name: airflow-webserver
+          image: "apache/airflow:2.7.3-python3.10"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: 
+            - airflow
+            - webserver
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: AIRFLOW__CORE__EXECUTOR
+              value: "CeleryExecutor"
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              value: "postgresql://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ include "smart-money-tracking.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}"
+            - name: AIRFLOW__CELERY__RESULT_BACKEND
+              value: "db+postgresql://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ include "smart-money-tracking.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}"
+            - name: AIRFLOW__CELERY__BROKER_URL
+              value: "redis://{{ include "smart-money-tracking.fullname" . }}-redis:6379/0"
+            - name: AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION
+              value: "true"
+            - name: AIRFLOW__CORE__LOAD_EXAMPLES
+              value: "false"
+            - name: AIRFLOW__API__AUTH_BACKENDS
+              value: "airflow.api.auth.backend.basic_auth"
+          volumeMounts:
+            - name: airflow-dags
+              mountPath: /opt/airflow/dags
+            - name: airflow-logs
+              mountPath: /opt/airflow/logs
+          resources:
+            {{- toYaml .Values.airflow.webserver.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+      volumes:
+        - name: airflow-dags
+          emptyDir: {}
+        - name: airflow-logs
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "smart-money-tracking.fullname" . }}-logs-pvc
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "smart-money-tracking.fullname" . }}-airflow-scheduler
+  labels:
+    {{- include "smart-money-tracking.labels" . | nindent 4 }}
+    app.kubernetes.io/component: airflow-scheduler
+spec:
+  replicas: {{ .Values.airflow.scheduler.replicas }}
+  selector:
+    matchLabels:
+      {{- include "smart-money-tracking.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: airflow-scheduler
+  template:
+    metadata:
+      labels:
+        {{- include "smart-money-tracking.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: airflow-scheduler
+    spec:
+      containers:
+        - name: airflow-scheduler
+          image: "apache/airflow:2.7.3-python3.10"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - airflow
+            - scheduler
+          env:
+            - name: AIRFLOW__CORE__EXECUTOR
+              value: "CeleryExecutor"
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              value: "postgresql://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ include "smart-money-tracking.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}"
+            - name: AIRFLOW__CELERY__RESULT_BACKEND
+              value: "db+postgresql://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ include "smart-money-tracking.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}"
+            - name: AIRFLOW__CELERY__BROKER_URL
+              value: "redis://{{ include "smart-money-tracking.fullname" . }}-redis:6379/0"
+          volumeMounts:
+            - name: airflow-dags
+              mountPath: /opt/airflow/dags
+            - name: airflow-logs
+              mountPath: /opt/airflow/logs
+          resources:
+            {{- toYaml .Values.airflow.scheduler.resources | nindent 12 }}
+      volumes:
+        - name: airflow-dags
+          emptyDir: {}
+        - name: airflow-logs
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "smart-money-tracking.fullname" . }}-logs-pvc
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "smart-money-tracking.fullname" . }}-airflow-worker
+  labels:
+    {{- include "smart-money-tracking.labels" . | nindent 4 }}
+    app.kubernetes.io/component: airflow-worker
+spec:
+  replicas: {{ .Values.airflow.worker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "smart-money-tracking.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: airflow-worker
+  template:
+    metadata:
+      labels:
+        {{- include "smart-money-tracking.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: airflow-worker
+    spec:
+      containers:
+        - name: airflow-worker
+          image: "apache/airflow:2.7.3-python3.10"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - airflow
+            - celery
+            - worker
+          env:
+            - name: AIRFLOW__CORE__EXECUTOR
+              value: "CeleryExecutor"
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              value: "postgresql://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ include "smart-money-tracking.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}"
+            - name: AIRFLOW__CELERY__RESULT_BACKEND
+              value: "db+postgresql://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ include "smart-money-tracking.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}"
+            - name: AIRFLOW__CELERY__BROKER_URL
+              value: "redis://{{ include "smart-money-tracking.fullname" . }}-redis:6379/0"
+          volumeMounts:
+            - name: airflow-dags
+              mountPath: /opt/airflow/dags
+            - name: airflow-logs
+              mountPath: /opt/airflow/logs
+          resources:
+            {{- toYaml .Values.airflow.worker.resources | nindent 12 }}
+      volumes:
+        - name: airflow-dags
+          emptyDir: {}
+        - name: airflow-logs
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "smart-money-tracking.fullname" . }}-logs-pvc
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "smart-money-tracking.fullname" . }}-redis
+  labels:
+    {{- include "smart-money-tracking.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "smart-money-tracking.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "smart-money-tracking.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: "redis:7.2-alpine"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "250m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "smart-money-tracking.fullname" . }}-airflow-webserver
+  labels:
+    {{- include "smart-money-tracking.labels" . | nindent 4 }}
+    app.kubernetes.io/component: airflow-webserver
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "smart-money-tracking.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: airflow-webserver
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "smart-money-tracking.fullname" . }}-redis
+  labels:
+    {{- include "smart-money-tracking.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: redis
+      protocol: TCP
+      name: redis
+  selector:
+    {{- include "smart-money-tracking.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+{{- end }}

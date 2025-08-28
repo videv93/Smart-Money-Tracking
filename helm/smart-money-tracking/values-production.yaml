@@ -1,0 +1,309 @@
+# Production values for smart-money-tracking
+# Override default values for production deployment
+
+# Global settings
+global:
+  storageClass: "fast-ssd"
+  imagePullSecrets:
+    - name: regcred
+
+# Production image configuration
+image:
+  registry: your-registry.com
+  pullPolicy: Always
+  tag: "v1.0.0"
+
+# High availability configuration
+components:
+  blockchainIngestion:
+    replicas: 3
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+
+  batchProcessing:
+    schedule: "0 */4 * * *"  # Run every 4 hours in production
+    resources:
+      requests:
+        memory: "4Gi"
+        cpu: "2000m"
+      limits:
+        memory: "8Gi"
+        cpu: "4000m"
+
+  streamProcessing:
+    replicas: 3
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "1000m"
+      limits:
+        memory: "4Gi"
+        cpu: "2000m"
+
+  mlModel:
+    replicas: 2
+    resources:
+      requests:
+        memory: "4Gi"
+        cpu: "2000m"
+      limits:
+        memory: "8Gi"
+        cpu: "4000m"
+
+# Production database configuration
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: "CHANGE_ME_STRONG_PASSWORD"
+    username: "smartmoney_prod"
+    password: "CHANGE_ME_STRONG_PASSWORD"
+    database: "smart_money_prod_db"
+  primary:
+    persistence:
+      enabled: true
+      size: 200Gi
+      storageClass: "fast-ssd"
+    resources:
+      requests:
+        memory: "4Gi"
+        cpu: "2000m"
+      limits:
+        memory: "8Gi"
+        cpu: "4000m"
+  metrics:
+    enabled: true
+  backup:
+    enabled: true
+    cronjob:
+      schedule: "0 2 * * *"  # Daily backup at 2 AM
+
+# Production MinIO configuration
+minio:
+  enabled: true
+  mode: distributed
+  replicaCount: 4
+  auth:
+    rootUser: "CHANGE_ME_MINIO_USER"
+    rootPassword: "CHANGE_ME_STRONG_PASSWORD"
+  persistence:
+    enabled: true
+    size: 500Gi
+    storageClass: "fast-ssd"
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "1000m"
+    limits:
+      memory: "4Gi"
+      cpu: "2000m"
+
+# Production Kafka configuration
+kafka:
+  enabled: true
+  replicaCount: 3
+  zookeeper:
+    replicaCount: 3
+    persistence:
+      enabled: true
+      size: 50Gi
+      storageClass: "fast-ssd"
+  persistence:
+    enabled: true
+    size: 100Gi
+    storageClass: "fast-ssd"
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "1000m"
+    limits:
+      memory: "4Gi"
+      cpu: "2000m"
+  metrics:
+    kafka:
+      enabled: true
+    jmx:
+      enabled: true
+
+# Production monitoring
+monitoring:
+  prometheus:
+    enabled: true
+    server:
+      persistentVolume:
+        enabled: true
+        size: 100Gi
+        storageClass: "fast-ssd"
+      resources:
+        requests:
+          memory: "4Gi"
+          cpu: "2000m"
+        limits:
+          memory: "8Gi"
+          cpu: "4000m"
+      retention: "90d"
+    alertmanager:
+      enabled: true
+      persistentVolume:
+        enabled: true
+        size: 10Gi
+  
+  grafana:
+    enabled: true
+    admin:
+      user: admin
+      password: "CHANGE_ME_STRONG_PASSWORD"
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: "fast-ssd"
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+
+# Production Airflow configuration
+airflow:
+  enabled: true
+  webserver:
+    replicas: 2
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "1000m"
+      limits:
+        memory: "4Gi"
+        cpu: "2000m"
+  scheduler:
+    replicas: 2
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "1000m"
+      limits:
+        memory: "4Gi"
+        cpu: "2000m"
+  worker:
+    replicas: 4
+    resources:
+      requests:
+        memory: "4Gi"
+        cpu: "2000m"
+      limits:
+        memory: "8Gi"
+        cpu: "4000m"
+
+# Production ingress
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  hosts:
+    - host: smart-money.your-domain.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: smart-money-tls
+      hosts:
+        - smart-money.your-domain.com
+        - airflow.your-domain.com
+        - grafana.your-domain.com
+
+# Production persistence
+persistence:
+  enabled: true
+  storageClass: "fast-ssd"
+  accessMode: ReadWriteOnce
+  size:
+    data: 500Gi
+    logs: 100Gi
+    checkpoints: 50Gi
+
+# Production security
+security:
+  podSecurityPolicy:
+    enabled: true
+  networkPolicy:
+    enabled: true
+
+# Production configuration
+config:
+  blockchain:
+    ethereum:
+      startBlock: "latest"
+    smartMoney:
+      minWalletBalance: 100
+      minTransactionVolume: 10000
+      minSuccessRate: 0.75
+      whaleThreshold: 1000
+  spark:
+    driverMemory: "4g"
+    executorMemory: "4g"
+  flink:
+    checkpointInterval: 30000  # More frequent checkpoints in production
+  ml:
+    threshold: 0.85  # Higher threshold for production
+    retrainIntervalDays: 3  # More frequent retraining
+
+# Production secrets (use external secret management)
+secrets:
+  blockchain:
+    ethereumRpcUrl: "https://eth-mainnet.g.alchemy.com/v2/PRODUCTION_API_KEY"
+    polygonRpcUrl: "https://polygon-mainnet.g.alchemy.com/v2/PRODUCTION_API_KEY"
+    arbitrumRpcUrl: "https://arb-mainnet.g.alchemy.com/v2/PRODUCTION_API_KEY"
+  slack:
+    webhookUrl: "https://hooks.slack.com/services/YOUR/PRODUCTION/WEBHOOK"
+  email:
+    smtpHost: "smtp.gmail.com"
+    smtpPort: 587
+    username: "alerts@your-domain.com"
+    password: "CHANGE_ME_APP_PASSWORD"
+
+# Production autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Production pod disruption budgets
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Node selectors for production workloads
+nodeSelector:
+  node-type: "compute-optimized"
+
+# Tolerations for dedicated nodes
+tolerations:
+  - key: "workload"
+    operator: "Equal"
+    value: "smart-money-tracking"
+    effect: "NoSchedule"
+
+# Affinity rules for high availability
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - smart-money-tracking
+          topologyKey: kubernetes.io/hostname

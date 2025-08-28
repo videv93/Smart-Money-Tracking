@@ -1,0 +1,145 @@
+{{- if .Values.components.monitoring.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "smart-money-tracking.fullname" . }}-monitoring
+  labels:
+    {{- include "smart-money-tracking.labels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+spec:
+  replicas: {{ .Values.components.monitoring.replicas }}
+  selector:
+    matchLabels:
+      {{- include "smart-money-tracking.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: monitoring
+  template:
+    metadata:
+      labels:
+        {{- include "smart-money-tracking.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: monitoring
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: monitoring
+          image: "{{ .Values.image.registry }}/{{ .Values.components.monitoring.image.repository }}:{{ .Values.components.monitoring.image.tag | default .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8084
+              protocol: TCP
+          env:
+            - name: POSTGRES_HOST
+              value: "{{ include "smart-money-tracking.fullname" . }}-postgresql"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: "{{ .Values.postgresql.auth.database }}"
+            - name: POSTGRES_USER
+              value: "{{ .Values.postgresql.auth.username }}"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "smart-money-tracking.fullname" . }}-postgresql-secret
+                  key: postgresql-password
+            - name: LARGE_TRANSACTION_THRESHOLD
+              value: "{{ .Values.config.monitoring.alertThresholds.largeTransaction }}"
+            - name: UNUSUAL_GAS_THRESHOLD
+              value: "{{ .Values.config.monitoring.alertThresholds.unusualGas }}"
+            - name: SMART_MONEY_CONFIDENCE_THRESHOLD
+              value: "{{ .Values.config.monitoring.alertThresholds.smartMoneyConfidence }}"
+            {{- if .Values.secrets.slack.webhookUrl }}
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "smart-money-tracking.fullname" . }}-monitoring-secrets
+                  key: slack-webhook-url
+            {{- end }}
+            {{- if .Values.secrets.email.smtpHost }}
+            - name: SMTP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "smart-money-tracking.fullname" . }}-monitoring-secrets
+                  key: smtp-host
+            - name: SMTP_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "smart-money-tracking.fullname" . }}-monitoring-secrets
+                  key: smtp-port
+            - name: SMTP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "smart-money-tracking.fullname" . }}-monitoring-secrets
+                  key: smtp-username
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "smart-money-tracking.fullname" . }}-monitoring-secrets
+                  key: smtp-password
+            {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            - name: logs-volume
+              mountPath: /app/logs
+          resources:
+            {{- toYaml .Values.components.monitoring.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "smart-money-tracking.fullname" . }}-config
+        {{- if .Values.persistence.enabled }}
+        - name: logs-volume
+          persistentVolumeClaim:
+            claimName: {{ include "smart-money-tracking.fullname" . }}-logs-pvc
+        {{- else }}
+        - name: logs-volume
+          emptyDir: {}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "smart-money-tracking.fullname" . }}-monitoring
+  labels:
+    {{- include "smart-money-tracking.labels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.ports.http }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "smart-money-tracking.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+{{- end }}

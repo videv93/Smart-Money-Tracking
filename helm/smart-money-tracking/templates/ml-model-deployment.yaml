@@ -1,0 +1,142 @@
+{{- if .Values.components.mlModel.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "smart-money-tracking.fullname" . }}-ml-model
+  labels:
+    {{- include "smart-money-tracking.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ml-model
+spec:
+  replicas: {{ .Values.components.mlModel.replicas }}
+  selector:
+    matchLabels:
+      {{- include "smart-money-tracking.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ml-model
+  template:
+    metadata:
+      labels:
+        {{- include "smart-money-tracking.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ml-model
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: ml-model
+          image: "{{ .Values.image.registry }}/{{ .Values.components.mlModel.image.repository }}:{{ .Values.components.mlModel.image.tag | default .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8082
+              protocol: TCP
+            - name: metrics
+              containerPort: 8083
+              protocol: TCP
+          env:
+            - name: POSTGRES_HOST
+              value: "{{ include "smart-money-tracking.fullname" . }}-postgresql"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: "{{ .Values.postgresql.auth.database }}"
+            - name: POSTGRES_USER
+              value: "{{ .Values.postgresql.auth.username }}"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "smart-money-tracking.fullname" . }}-postgresql-secret
+                  key: postgresql-password
+            - name: MINIO_ENDPOINT
+              value: "{{ include "smart-money-tracking.fullname" . }}-minio:9000"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "smart-money-tracking.fullname" . }}-minio-secret
+                  key: root-user
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "smart-money-tracking.fullname" . }}-minio-secret
+                  key: root-password
+            - name: ML_MODEL_NAME
+              value: "{{ .Values.config.ml.modelName }}"
+            - name: ML_THRESHOLD
+              value: "{{ .Values.config.ml.threshold }}"
+            - name: ML_RETRAIN_INTERVAL_DAYS
+              value: "{{ .Values.config.ml.retrainIntervalDays }}"
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            - name: data-volume
+              mountPath: /app/data
+            - name: logs-volume
+              mountPath: /app/logs
+          resources:
+            {{- toYaml .Values.components.mlModel.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "smart-money-tracking.fullname" . }}-config
+        {{- if .Values.persistence.enabled }}
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: {{ include "smart-money-tracking.fullname" . }}-data-pvc
+        - name: logs-volume
+          persistentVolumeClaim:
+            claimName: {{ include "smart-money-tracking.fullname" . }}-logs-pvc
+        {{- else }}
+        - name: data-volume
+          emptyDir: {}
+        - name: logs-volume
+          emptyDir: {}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "smart-money-tracking.fullname" . }}-ml-model
+  labels:
+    {{- include "smart-money-tracking.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ml-model
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.ports.http }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 8083
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "smart-money-tracking.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ml-model
+{{- end }}
